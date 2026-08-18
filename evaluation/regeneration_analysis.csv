@@ -1,0 +1,4 @@
+difficulty_label,N,Fixed_Regeneration_Count,Adaptive_Regeneration_Count,Fixed_Regenerated_Problems,Adaptive_Regenerated_Problems
+easy,64,16.0,16.0,100.0,100.0
+hard,23,16.0,16.0,100.0,100.0
+medium,63,16.0,16.0,100.0,100.0

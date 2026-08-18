@@ -1,0 +1,4 @@
+difficulty_label,N,Agreement,Entropy,Tau
+easy,64,1.0,0.0,0.45
+hard,23,0.25,2.0,0.9
+medium,63,0.623015873015873,1.1134860612417956,0.75

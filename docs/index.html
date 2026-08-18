@@ -1,0 +1,845 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Adaptive Prefix Consistency · Preliminary Study</title>
+    <meta
+      name="description"
+      content="A preliminary study extending prefix-consistency-weighted majority voting with adaptive truncation τ under Colab T4 constraints."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg0: #eef3f7;
+        --bg1: #f7fafc;
+        --ink: #1a2b36;
+        --ink-soft: #3d5563;
+        --muted: #5f7380;
+        --line: #c5d3dd;
+        --accent: #0e6b6a;
+        --accent-deep: #0a4f4e;
+        --warm: #b8612d;
+        --panel: #f4f8fb;
+        --hi: #ffffff;
+        --lo: #b8c7d2;
+        --shadow-out:
+          10px 10px 22px rgba(26, 43, 54, 0.12),
+          -8px -8px 18px rgba(255, 255, 255, 0.95);
+        --shadow-in:
+          inset 6px 6px 14px rgba(26, 43, 54, 0.08),
+          inset -6px -6px 14px rgba(255, 255, 255, 0.9);
+        --bevel:
+          inset 1px 1px 0 rgba(255, 255, 255, 0.95),
+          inset -1px -1px 0 rgba(140, 160, 175, 0.45),
+          8px 8px 18px rgba(26, 43, 54, 0.1),
+          -6px -6px 14px rgba(255, 255, 255, 0.85);
+        --radius: 18px;
+        --max: 1080px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        color: var(--ink);
+        font-family: "Literata", Georgia, serif;
+        font-optical-sizing: auto;
+        line-height: 1.65;
+        background:
+          radial-gradient(
+            1200px 700px at 12% -10%,
+            #d9ebea 0%,
+            transparent 55%
+          ),
+          radial-gradient(900px 600px at 100% 8%, #e4edf5 0%, transparent 50%),
+          linear-gradient(180deg, var(--bg1), var(--bg0));
+        min-height: 100vh;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.35;
+        background-image:
+          linear-gradient(rgba(26, 43, 54, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(26, 43, 54, 0.035) 1px, transparent 1px);
+        background-size: 28px 28px;
+        mask-image: radial-gradient(
+          ellipse at center,
+          black 35%,
+          transparent 80%
+        );
+        z-index: 0;
+      }
+
+      .wrap {
+        position: relative;
+        z-index: 1;
+        width: min(var(--max), calc(100% - 2.5rem));
+        margin: 0 auto;
+      }
+
+      /* 3D extruded surface */
+      .extrude {
+        background: linear-gradient(145deg, #fbfcfd 0%, #eaf0f5 100%);
+        border: 1px solid rgba(197, 211, 221, 0.9);
+        border-radius: var(--radius);
+        box-shadow: var(--bevel);
+        position: relative;
+      }
+      .extrude::after {
+        content: "";
+        position: absolute;
+        inset: 3px;
+        border-radius: calc(var(--radius) - 4px);
+        border: 1px solid rgba(255, 255, 255, 0.55);
+        pointer-events: none;
+      }
+
+      .inset {
+        background: linear-gradient(165deg, #e7eef3, #f7fafc);
+        border-radius: 14px;
+        box-shadow: var(--shadow-in);
+        border: 1px solid rgba(197, 211, 221, 0.7);
+      }
+
+      /* Nav */
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1.1rem 0 0.4rem;
+      }
+      .nav-brand {
+        font-family: "Bricolage Grotesque", sans-serif;
+        font-weight: 700;
+        font-size: 0.95rem;
+        letter-spacing: -0.02em;
+        color: var(--accent-deep);
+        text-decoration: none;
+      }
+      .nav-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem 0.9rem;
+        font-size: 0.92rem;
+      }
+      .nav-links a {
+        color: var(--ink-soft);
+        text-decoration: none;
+        border-bottom: 1.5px solid transparent;
+        transition:
+          color 0.2s,
+          border-color 0.2s;
+      }
+      .nav-links a:hover {
+        color: var(--accent);
+        border-color: rgba(14, 107, 106, 0.35);
+      }
+
+      /* Hero */
+      .hero {
+        margin: 1.2rem 0 2.5rem;
+        padding: 2.4rem 2.2rem 2.2rem;
+        overflow: hidden;
+      }
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 2rem;
+        align-items: end;
+      }
+      .brand {
+        font-family: "Bricolage Grotesque", sans-serif;
+        font-weight: 800;
+        font-size: clamp(2.35rem, 5.2vw, 3.6rem);
+        line-height: 0.98;
+        letter-spacing: -0.045em;
+        color: var(--ink);
+        margin: 0 0 1rem;
+      }
+      .brand em {
+        font-style: normal;
+        color: var(--accent);
+      }
+      .lede {
+        font-size: 1.08rem;
+        color: var(--ink-soft);
+        max-width: 36rem;
+        margin: 0 0 1.4rem;
+      }
+      .cta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: center;
+      }
+      .btn {
+        appearance: none;
+        border: none;
+        cursor: pointer;
+        text-decoration: none;
+        font-family: "Bricolage Grotesque", sans-serif;
+        font-weight: 700;
+        font-size: 0.95rem;
+        padding: 0.78rem 1.15rem;
+        border-radius: 12px;
+        color: #f4fffe;
+        background: linear-gradient(160deg, #14807e, #0a4f4e);
+        box-shadow:
+          inset 1px 1px 0 rgba(255, 255, 255, 0.25),
+          inset -1px -1px 0 rgba(0, 0, 0, 0.2),
+          6px 6px 14px rgba(26, 43, 54, 0.16),
+          -3px -3px 8px rgba(255, 255, 255, 0.7);
+        transition:
+          transform 0.18s ease,
+          filter 0.18s ease;
+      }
+      .btn:hover {
+        transform: translateY(-1px);
+        filter: brightness(1.05);
+      }
+      .btn-ghost {
+        color: var(--ink-soft);
+        background: linear-gradient(145deg, #f8fbfd, #e4ebf1);
+        box-shadow: var(--bevel);
+      }
+
+      .hero-stat {
+        padding: 1.15rem 1.2rem;
+        transform: perspective(900px) rotateY(-6deg) rotateX(3deg);
+        transition: transform 0.35s ease;
+      }
+      .hero-stat:hover {
+        transform: perspective(900px) rotateY(-2deg) rotateX(1deg);
+      }
+      .hero-stat .k {
+        font-family: "Bricolage Grotesque", sans-serif;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        margin-bottom: 0.55rem;
+      }
+      .hero-stat .v {
+        font-family: "Bricolage Grotesque", sans-serif;
+        font-weight: 800;
+        font-size: 1.55rem;
+        letter-spacing: -0.03em;
+        line-height: 1.15;
+        margin: 0 0 0.35rem;
+      }
+      .hero-stat .s {
+        margin: 0;
+        font-size: 0.92rem;
+        color: var(--ink-soft);
+      }
+      .meta-chip {
+        display: inline-block;
+        margin-top: 0.9rem;
+        padding: 0.35rem 0.7rem;
+        font-size: 0.82rem;
+        color: var(--accent-deep);
+        background: rgba(14, 107, 106, 0.08);
+        border-radius: 8px;
+        border: 1px solid rgba(14, 107, 106, 0.18);
+        box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.7);
+      }
+
+      section {
+        margin: 0 0 2.1rem;
+        padding: 1.7rem 1.7rem 1.55rem;
+      }
+      .sec-title {
+        font-family: "Bricolage Grotesque", sans-serif;
+        font-weight: 800;
+        font-size: clamp(1.45rem, 2.6vw, 1.9rem);
+        letter-spacing: -0.03em;
+        margin: 0 0 0.85rem;
+        line-height: 1.15;
+      }
+      .sec-lead {
+        color: var(--ink-soft);
+        margin: 0 0 1.2rem;
+        max-width: 46rem;
+      }
+      p {
+        margin: 0 0 0.95rem;
+        color: var(--ink);
+      }
+      strong {
+        font-weight: 600;
+      }
+
+      .pipeline {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 0.55rem;
+        margin: 1.2rem 0 0.4rem;
+      }
+      .step {
+        text-align: center;
+        padding: 0.9rem 0.55rem;
+        font-family: "Bricolage Grotesque", sans-serif;
+        font-weight: 700;
+        font-size: 0.86rem;
+        letter-spacing: -0.01em;
+        color: var(--accent-deep);
+        transform: translateZ(0);
+        transition: transform 0.2s ease;
+      }
+      .step:hover {
+        transform: translateY(-3px);
+      }
+      .step small {
+        display: block;
+        margin-top: 0.35rem;
+        font-family: "Literata", serif;
+        font-weight: 400;
+        font-size: 0.78rem;
+        color: var(--muted);
+        letter-spacing: 0;
+      }
+      .arrow-row {
+        display: none;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.8rem;
+        margin: 1.1rem 0 1.4rem;
+      }
+      .stat {
+        padding: 1rem 0.95rem;
+        text-align: left;
+      }
+      .stat .n {
+        font-family: "Bricolage Grotesque", sans-serif;
+        font-weight: 800;
+        font-size: 1.7rem;
+        letter-spacing: -0.04em;
+        color: var(--accent-deep);
+        line-height: 1;
+      }
+      .stat .l {
+        margin-top: 0.4rem;
+        font-size: 0.86rem;
+        color: var(--muted);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        overflow: hidden;
+        border-radius: 12px;
+        box-shadow: var(--shadow-in);
+        background: #f7fafc;
+      }
+      th,
+      td {
+        padding: 0.72rem 0.85rem;
+        text-align: left;
+        border-bottom: 1px solid rgba(197, 211, 221, 0.85);
+        font-size: 0.94rem;
+      }
+      th {
+        font-family: "Bricolage Grotesque", sans-serif;
+        font-weight: 700;
+        font-size: 0.82rem;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.55);
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      td.num {
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+      }
+
+      .figure-block {
+        margin: 1.35rem 0;
+        padding: 1rem;
+      }
+      .figure-block img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: 12px;
+        box-shadow: var(--shadow-in);
+        background: #fff;
+      }
+      .figcap {
+        margin: 0.75rem 0.15rem 0;
+        font-size: 0.9rem;
+        color: var(--muted);
+        text-align: center;
+        font-style: italic;
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+      }
+
+      .callout {
+        margin: 1.1rem 0;
+        padding: 1.05rem 1.15rem;
+        border-left: 4px solid var(--accent);
+      }
+      .callout p:last-child {
+        margin-bottom: 0;
+      }
+
+      .list-clean {
+        margin: 0.4rem 0 1rem;
+        padding-left: 1.1rem;
+        color: var(--ink-soft);
+      }
+      .list-clean li {
+        margin: 0.35rem 0;
+      }
+
+      footer {
+        margin: 2.5rem 0 2rem;
+        padding: 1.4rem 1.5rem;
+        text-align: center;
+      }
+      footer p {
+        margin: 0.25rem 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+      footer a {
+        color: var(--accent-deep);
+      }
+
+      .reveal {
+        opacity: 0;
+        transform: translateY(18px);
+        transition:
+          opacity 0.7s ease,
+          transform 0.7s ease;
+      }
+      .reveal.show {
+        opacity: 1;
+        transform: none;
+      }
+
+      @media (max-width: 860px) {
+        .hero-grid,
+        .grid-2,
+        .stats,
+        .pipeline {
+          grid-template-columns: 1fr;
+        }
+        .pipeline {
+          gap: 0.65rem;
+        }
+        .hero-stat {
+          transform: none;
+        }
+        .hero {
+          padding: 1.6rem 1.25rem;
+        }
+        section {
+          padding: 1.35rem 1.2rem;
+        }
+        .wrap {
+          width: min(var(--max), calc(100% - 1.4rem));
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <nav class="nav">
+        <a class="nav-brand" href="#top">Adaptive Prefix Consistency</a>
+        <div class="nav-links">
+          <a href="#question">Question</a>
+          <a href="#method">Method</a>
+          <a href="#results">Results</a>
+          <a href="#insights">Insights</a>
+          <a href="#next">Next</a>
+        </div>
+      </nav>
+
+      <header class="hero extrude" id="top">
+        <div class="hero-grid">
+          <div>
+            <h1 class="brand">Adaptive<br /><em>Prefix Consistency</em></h1>
+            <p class="lede">
+              A preliminary study extending PC-WMV with per-problem truncation τ
+              same voting rule as Iwase et al. (2026), different τ selection run
+              honestly under free Colab T4 limits.
+            </p>
+            <div class="cta-row">
+              <a class="btn" href="#results">See the evaluation</a>
+              <a
+                class="btn btn-ghost"
+                href="https://drive.google.com/drive/folders/1vZo0lUbxX7dY0T9_osn59RWdSRlhIQXW"
+                target="_blank"
+                rel="noopener"
+                >Open figure folder</a
+              >
+            </div>
+            <div class="meta-chip">
+              Prepared for Prof. Junpei Komiyama · MBZUAI · Aug 2026
+            </div>
+          </div>
+          <aside class="hero-stat inset">
+            <div class="k">Matched comparison</div>
+            <p class="v">Fixed τ = 0.75<br />vs Adaptive τ</p>
+            <p class="s">
+              Same GSM8K problems · same initial CoTs · paper-faithful PC-WMV
+            </p>
+          </aside>
+        </div>
+      </header>
+
+      <section class="extrude reveal" id="question">
+        <h2 class="sec-title">The question</h2>
+        <p class="sec-lead">
+          Prefix consistency measures whether a Chain-of-Thought (CoT) answer
+          reappears after truncating the trace at fraction τ and regenerating.
+          The paper fixes τ = 0.75. Their limitations note that τ is not chosen
+          adaptively. So:
+        </p>
+        <div class="callout inset">
+          <p>
+            <strong
+              >On identical data, does adaptive τ beat PC-WMV with τ =
+              0.75?</strong
+            >
+            Oracle τ (gold-chosen analysis only) asks how large the room for
+            improvement is.
+          </p>
+        </div>
+      </section>
+
+      <section class="extrude reveal" id="method">
+        <h2 class="sec-title">Method — same PC-WMV, different τ</h2>
+        <p>
+          Aggregation follows the paper (Eqs. 7–8 / Algorithm 1, K = 1, cubic
+          weights). Adaptive τ uses a label-free pilot: answer agreement among
+          early samples maps to : easy → 0.45, medium → 0.75, hard → 0.90.
+        </p>
+        <div class="pipeline">
+          <div class="step extrude">Question<small>GSM8K item</small></div>
+          <div class="step extrude">N CoTs<small>N = 4 samples</small></div>
+          <div class="step extrude">Pilot<small>agreement → bin</small></div>
+          <div class="step extrude">
+            Adaptive τ<small>0.45 / 0.75 / 0.90</small>
+          </div>
+          <div class="step extrude">PC-WMV<small>paper scoring</small></div>
+        </div>
+      </section>
+
+      <section class="extrude reveal" id="setup">
+        <h2 class="sec-title">Setup &amp; constraints</h2>
+        <p>
+          All generation ran on <strong>Google Colab free T4</strong>. That
+          ruled out paper-scale models and large N. I used
+          <strong>Qwen3-0.6B</strong> on <strong>10 GSM8K</strong> problems so
+          the comparison stayed fair and finishable not so I could claim
+          olympiad-level token savings.
+        </p>
+        <div class="stats">
+          <div class="stat inset">
+            <div class="n">10</div>
+            <div class="l">GSM8K problems</div>
+          </div>
+          <div class="stat inset">
+            <div class="n">4</div>
+            <div class="l">samples / problem</div>
+          </div>
+          <div class="stat inset">
+            <div class="n">0.6B</div>
+            <div class="l">Qwen3 model</div>
+          </div>
+          <div class="stat inset">
+            <div class="n">T4</div>
+            <div class="l">free Colab GPU</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="extrude reveal" id="results">
+        <h2 class="sec-title">Results</h2>
+        <p class="sec-lead">
+          Fixed and Adaptive PC-WMV tied Majority Vote at 30%. Oracle τ reached
+          50% an upper bound showing τ selection can matter, even when my
+          heuristic did not win yet.The paper reports accuracy versus total
+          token budget by varying the number of reasoning samples, demonstrating
+          that PC-WMV achieves a target accuracy using substantially fewer
+          overall tokens than Standard Majority Vote whereas I had fixed number
+          of samples in a single run. Therefore, the two comparisons evaluate
+          different aspects of computational performance.
+        </p>
+
+        <div class="inset" style="padding: 0.4rem; margin-bottom: 1.2rem">
+          <table>
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Accuracy</th>
+                <th>Mean tokens</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Majority Vote</td>
+                <td class="num">30.0%</td>
+                <td class="num">1,953</td>
+              </tr>
+              <tr>
+                <td>PC-WMV (τ = 0.75)</td>
+                <td class="num">30.0%</td>
+                <td class="num">2,697</td>
+              </tr>
+              <tr>
+                <td>PC-WMV (Adaptive τ)</td>
+                <td class="num">30.0%</td>
+                <td class="num">2,706</td>
+              </tr>
+              <tr>
+                <td>PC-WMV (Oracle τ)</td>
+                <td class="num">50.0%</td>
+                <td class="num">3,349</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid-2">
+          <figure class="figure-block extrude">
+            <img
+              src="assets/figA_accuracy_bars.png"
+              alt="Accuracy by aggregation method"
+              loading="lazy"
+            />
+            <figcaption class="figcap">Fig. 1 — Accuracy by method</figcaption>
+          </figure>
+          <figure class="figure-block extrude">
+            <img
+              src="assets/figB_cost_accuracy.png"
+              alt="Cost accuracy tradeoff"
+              loading="lazy"
+            />
+            <figcaption class="figcap">
+              Fig. 2 — Cost–accuracy tradeoff
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="extrude reveal" id="signal">
+        <h2 class="sec-title">The paper’s signal still shows up</h2>
+        <p>
+          Even on this small model,
+          <strong>r<sub>C</sub> ≫ r<sub>W</sub></strong
+          >: correct traces reproduce more than wrong ones. Mean discrimination
+          gap <strong>D(τ)</strong> peaks near <strong>τ = 0.5</strong>, not the
+          paper default 0.75, and collapses at 0.9, evidence that τ should be
+          chosen carefully.
+        </p>
+        <div class="inset" style="padding: 0.4rem; margin: 1rem 0 1.2rem">
+          <table>
+            <thead>
+              <tr>
+                <th>τ</th>
+                <th>Mean r<sub>C</sub></th>
+                <th>Mean r<sub>W</sub></th>
+                <th>Mean D</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="num">0.30</td>
+                <td class="num">0.75</td>
+                <td class="num">0.09</td>
+                <td class="num">0.56</td>
+              </tr>
+              <tr>
+                <td class="num">0.50</td>
+                <td class="num">0.75</td>
+                <td class="num">0.03</td>
+                <td class="num">0.67</td>
+              </tr>
+              <tr>
+                <td class="num">0.75</td>
+                <td class="num">0.52</td>
+                <td class="num">0.08</td>
+                <td class="num">0.44</td>
+              </tr>
+              <tr>
+                <td class="num">0.90</td>
+                <td class="num">0.21</td>
+                <td class="num">0.09</td>
+                <td class="num">0.00</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="grid-2">
+          <figure class="figure-block extrude">
+            <img
+              src="assets/figC_rC_rW.png"
+              alt="r_C versus r_W"
+              loading="lazy"
+            />
+            <figcaption class="figcap">
+              Fig. 3 — Prefix-consistency asymmetry
+            </figcaption>
+          </figure>
+          <figure class="figure-block extrude">
+            <img
+              src="assets/figD_discrimination_gap.png"
+              alt="Discrimination gap vs tau"
+              loading="lazy"
+            />
+            <figcaption class="figcap">
+              Fig. 4 — Why τ matters: mean D(τ)
+            </figcaption>
+          </figure>
+        </div>
+        <div class="grid-2">
+          <figure class="figure-block extrude">
+            <img
+              src="assets/figE_pc_violin.png"
+              alt="Correct vs wrong violin"
+              loading="lazy"
+            />
+            <figcaption class="figcap">
+              Fig. 5 — Correct vs wrong at τ = 0.75
+            </figcaption>
+          </figure>
+          <figure class="figure-block extrude">
+            <img
+              src="assets/figF_pass1_vs_reproduction.png"
+              alt="Pass at 1 vs reproduction"
+              loading="lazy"
+            />
+            <figcaption class="figcap">
+              Fig. 6 — Pass@1 vs reproduction
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="extrude reveal" id="insights">
+        <h2 class="sec-title">Honest insights</h2>
+        <ul class="list-clean">
+          <li>
+            <strong>Only 10 GSM8K problems and N = 4 samples</strong> which
+            usually leads to high variance.
+          </li>
+          <li>
+            <strong>Oracle at 50%</strong> and a D(τ) peak away from 0.75
+            support the <em>idea</em> of adapting τ, not yet this heuristic.
+          </li>
+          <li>
+            Pilot agreement is only a proxy for difficulty and decide τ
+            accordingly; the paper’s theory cares about
+            <strong>D(τ)</strong>.
+          </li>
+          <li>
+            A 0.6B model on free T4 often sits outside the regime where PC-WMV
+            can recover from low Pass@1.
+          </li>
+          <li>
+            Under the current experimental setting (10 GSM8K problems using
+            Qwen3-0.6B with four sampled reasoning traces per problem), the
+            adaptive τ heuristic did not improve accuracy over the fixed τ =0.75
+            baseline (both achieved 30%).
+          </li>
+        </ul>
+        <figure class="figure-block extrude">
+          <img
+            src="assets/figG_adaptive_outcomes.png"
+            alt="Adaptive tau outcomes"
+            loading="lazy"
+          />
+          <figcaption class="figcap">
+            Fig. 7 - Adaptive τ choices and fixed vs adaptive outcomes
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="extrude reveal" id="next">
+        <h2 class="sec-title">What I would do next</h2>
+        <p>
+          With stronger compute, I would replace difficulty bins with a
+          label-free selector aimed at maximizing estimated D(τ), scale beyond
+          10×4, move to harder benchmarks closer to the paper, and study PC-WMV
+          hybrids with adaptive stopping left open in their work.
+        </p>
+        <div class="cta-row" style="margin-top: 1rem">
+          <a
+            class="btn"
+            href="https://arxiv.org/abs/2605.07654"
+            target="_blank"
+            rel="noopener"
+            >Upstream paper</a
+          >
+          <a
+            class="btn btn-ghost"
+            href="https://github.com/naoto-iwase/prefix-consistency"
+            target="_blank"
+            rel="noopener"
+            >Paper code</a
+          >
+        </div>
+      </section>
+
+      <footer class="extrude">
+        <p>
+          <strong>Adaptive Prefix Consistency</strong> — preliminary note for
+          Prof. Junpei Komiyama, MBZUAI
+        </p>
+        <p>
+          Based on Iwase, Ichihara, Quamar &amp; Komiyama (2026),
+          arXiv:2605.07654
+        </p>
+        <p>
+          <a
+            href="https://drive.google.com/drive/folders/1vZo0lUbxX7dY0T9_osn59RWdSRlhIQXW"
+            target="_blank"
+            rel="noopener"
+            >Raw outputs &amp; figures on Drive</a
+          >
+        </p>
+      </footer>
+    </div>
+
+    <script>
+      const io = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) e.target.classList.add("show");
+          });
+        },
+        { threshold: 0.12 },
+      );
+      document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+    </script>
+  </body>
+</html>

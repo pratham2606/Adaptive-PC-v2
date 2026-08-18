@@ -1,0 +1,32 @@
+model_id: Qwen/Qwen3-0.6B
+dataset: gsm8k
+split: test
+
+num_problems: 150
+seed: 42
+
+n_samples: 16
+k_regen: 1
+
+max_new_tokens: 512
+temperature: 0.7
+top_p: 0.95
+do_sample: true
+
+fixed_tau: 0.75
+n_pilot: 4
+pc_weight: cubic
+
+dtype: float16
+device_map: auto
+load_in_4bit: false
+enable_thinking: false
+
+output_dir: outputs/gsm8k_qwen06b_final
+
+adaptive_tau:
+  easy_agreement: 0.85
+  hard_agreement: 0.40
+  tau_easy: 0.45
+  tau_medium: 0.75
+  tau_hard: 0.90

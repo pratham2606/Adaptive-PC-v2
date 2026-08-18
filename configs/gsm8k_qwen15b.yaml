@@ -1,0 +1,31 @@
+# Slightly larger model option (still T4-friendly with 4-bit)
+model_id: Qwen/Qwen2.5-1.5B-Instruct
+dataset: gsm8k
+split: test
+num_problems: 50
+seed: 42
+
+n_samples: 8
+k_regen: 1
+max_new_tokens: 512
+temperature: 0.7
+top_p: 0.95
+do_sample: true
+
+fixed_tau: 0.75
+tau_grid: [0.3, 0.5, 0.75, 0.9]
+
+n_pilot: 3
+adaptive_tau:
+  easy_agreement: 0.85
+  hard_agreement: 0.40
+  tau_easy: 0.45
+  tau_medium: 0.75
+  tau_hard: 0.90
+
+output_dir: outputs/gsm8k_qwen15b
+dtype: float16
+device_map: auto
+load_in_4bit: true
+enable_thinking: false
+pc_weight: cubic
